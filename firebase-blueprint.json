@@ -1,0 +1,274 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Product in the ERP inventory catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "barcode": { "type": "string" },
+        "sku": { "type": "string" },
+        "category": { "type": "string" },
+        "brand": { "type": "string" },
+        "description": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "sellingPrice": { "type": "number" },
+        "wholesalePrice": { "type": "number" },
+        "stockQuantity": { "type": "number" },
+        "minStockAlert": { "type": "number" },
+        "image": { "type": "string" }
+      },
+      "required": ["id", "name", "barcode", "sku", "category", "costPrice", "sellingPrice", "stockQuantity", "minStockAlert"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Product classification category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" }
+      },
+      "required": ["id", "name"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer account with balance ledger details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "balance": { "type": "number" },
+        "debtLimit": { "type": "number" },
+        "purchaseHistory": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "phone", "address", "balance", "debtLimit"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "Supplier contacts and total amount payable",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "payables": { "type": "number" }
+      },
+      "required": ["id", "name", "contactPerson", "phone", "address", "payables"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Retail sales order invoice from POS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "price": { "type": "number" },
+              "discount": { "type": "number" }
+            },
+            "required": ["productId", "productName", "quantity", "price", "discount"]
+          }
+        },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "total": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "card", "transfer", "debt"] },
+        "amountPaid": { "type": "number" },
+        "change": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["completed", "refunded", "returned"] }
+      },
+      "required": ["id", "invoiceNumber", "customerName", "items", "subtotal", "discountAmount", "taxAmount", "total", "paymentMethod", "amountPaid", "change", "date", "status"]
+    },
+    "Purchase": {
+      "title": "Purchase",
+      "description": "Warehouse stock inventory purchase invoice",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "quantity": { "type": "number" },
+              "costPrice": { "type": "number" }
+            },
+            "required": ["productId", "productName", "quantity", "costPrice"]
+          }
+        },
+        "total": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "paymentStatus": { "type": "string", "enum": ["paid", "partial", "unpaid"] },
+        "amountPaid": { "type": "number" }
+      },
+      "required": ["id", "invoiceNumber", "supplierId", "supplierName", "items", "total", "date", "paymentStatus", "amountPaid"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Daily operational expense ledger entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "description", "amount", "category", "date"]
+    },
+    "InventoryMovement": {
+      "title": "InventoryMovement",
+      "description": "Warehouse stock manual adjustment and flow logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string", "enum": ["in", "out", "adjust"] },
+        "quantity": { "type": "number" },
+        "notes": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "productId", "productName", "type", "quantity", "date"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Company profile details and tax configuration",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "taxNumber": { "type": "string" },
+        "taxRate": { "type": "number" },
+        "currencySymbol": { "type": "string" },
+        "invoiceNotes": { "type": "string" }
+      },
+      "required": ["name", "logo", "phone", "address", "taxNumber", "taxRate", "currencySymbol", "invoiceNotes"]
+    },
+    "UserPermissions": {
+      "title": "UserPermissions",
+      "description": "Permissions associated with a system user role",
+      "type": "object",
+      "properties": {
+        "dashboard": { "type": "boolean" },
+        "pos": { "type": "boolean" },
+        "products": { "type": "boolean" },
+        "categories": { "type": "boolean" },
+        "customers": { "type": "boolean" },
+        "suppliers": { "type": "boolean" },
+        "inventory": { "type": "boolean" },
+        "purchases": { "type": "boolean" },
+        "sales": { "type": "boolean" },
+        "expenses": { "type": "boolean" },
+        "reports": { "type": "boolean" },
+        "settings": { "type": "boolean" },
+        "editInvoices": { "type": "boolean" },
+        "returnItems": { "type": "boolean" }
+      },
+      "required": [
+        "dashboard", "pos", "products", "categories", "customers", "suppliers", 
+        "inventory", "purchases", "sales", "expenses", "reports", "settings", 
+        "editInvoices", "returnItems"
+      ]
+    },
+    "SystemUser": {
+      "title": "SystemUser",
+      "description": "System user account / credential details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "username": { "type": "string" },
+        "phone": { "type": "string" },
+        "pinCode": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "manager", "cashier"] },
+        "permissions": { "$ref": "#/entities/UserPermissions" }
+      },
+      "required": ["id", "name", "username", "phone", "pinCode", "role", "permissions"]
+    },
+    "ActiveSession": {
+      "title": "ActiveSession",
+      "description": "Currently active user session ID pointer",
+      "type": "object",
+      "properties": {
+        "activeUserId": { "type": "string" }
+      },
+      "required": ["activeUserId"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Collection of active business products in inventory catalog"
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Classification groups/categories for styling and organizing inventory catalog"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Collection of registered business custom customers (CRM)"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": { "$ref": "#/entities/Supplier" },
+      "description": "Directory of raw-goods inventory suppliers the business deals with"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Checkout transactions / client sales orders generated at POS registers"
+    },
+    "/purchases/{purchaseId}": {
+      "schema": { "$ref": "#/entities/Purchase" },
+      "description": "Incoming supplier invoices to load raw products and set supplier credit accounts"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Overhead ledger expenses (rent, bills, utilities, wages)"
+    },
+    "/movements/{movementId}": {
+      "schema": { "$ref": "#/entities/InventoryMovement" },
+      "description": "Audited history logging stock changes for each product ID"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/CompanySettings" },
+      "description": "Static enterprise configurations including VAT information"
+    },
+    "/users_list/{userId}": {
+      "schema": { "$ref": "#/entities/SystemUser" },
+      "description": "Internal login accounts for point-of-sale registers"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": " 1.1نظام المبيعات والمخازن الذكي",
+  "description": "نظام مبيعات ونقاط بيع متكامل (POS) وإدارة المستودعات، الحسابات، الموردين، والعملاء مع دعم كامل للغة العربية والعمل أوفلاين.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

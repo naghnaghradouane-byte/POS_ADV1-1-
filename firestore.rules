@@ -1,0 +1,249 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Reset / Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn();
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 2. Products validation
+    function isValidProduct(p) {
+      return p.keys().hasAll(['id', 'name', 'barcode', 'sku', 'category', 'costPrice', 'sellingPrice', 'stockQuantity', 'minStockAlert'])
+        && p.id is string && p.id.size() <= 128
+        && p.name is string && p.name.size() <= 256
+        && p.barcode is string && p.barcode.size() <= 128
+        && p.sku is string && p.sku.size() <= 128
+        && p.category is string && p.category.size() <= 128
+        && p.costPrice is number && p.costPrice >= 0
+        && p.sellingPrice is number && p.sellingPrice >= 0
+        && p.stockQuantity is number && p.stockQuantity >= 0
+        && p.minStockAlert is number && p.minStockAlert >= 0;
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(productId) && isValidProduct(incoming()) && incoming().id == productId;
+      allow update: if isEmailVerified() && isValidId(productId) && isValidProduct(incoming()) && incoming().id == productId;
+      allow delete: if isEmailVerified() && isValidId(productId);
+    }
+
+    // 3. Categories validation
+    function isValidCategory(c) {
+      return c.keys().hasAll(['id', 'name'])
+        && c.id is string && c.id.size() <= 128
+        && c.name is string && c.name.size() <= 256;
+    }
+
+    match /categories/{categoryId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(categoryId) && isValidCategory(incoming()) && incoming().id == categoryId;
+      allow update: if isEmailVerified() && isValidId(categoryId) && isValidCategory(incoming()) && incoming().id == categoryId;
+      allow delete: if isEmailVerified() && isValidId(categoryId);
+    }
+
+    // 4. Customers validation
+    function isValidCustomer(c) {
+      return c.keys().hasAll(['id', 'name', 'phone', 'address', 'balance', 'debtLimit'])
+        && c.id is string && c.id.size() <= 128
+        && c.name is string && c.name.size() <= 256
+        && c.phone is string && c.phone.size() <= 64
+        && c.address is string && c.address.size() <= 512
+        && c.balance is number
+        && c.debtLimit is number && c.debtLimit >= 0
+        && (!c.keys().hasAny(['latitude']) || c.latitude == null || c.latitude is number)
+        && (!c.keys().hasAny(['longitude']) || c.longitude == null || c.longitude is number)
+        && (!c.keys().hasAny(['notes']) || c.notes == null || (c.notes is string && c.notes.size() <= 2048))
+        && (!c.keys().hasAny(['createdAt']) || c.createdAt == null || c.createdAt is string)
+        && (!c.keys().hasAny(['updatedAt']) || c.updatedAt == null || c.updatedAt is string);
+    }
+
+    match /customers/{customerId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(customerId) && isValidCustomer(incoming()) && incoming().id == customerId;
+      allow update: if isEmailVerified() && isValidId(customerId) && isValidCustomer(incoming()) && incoming().id == customerId;
+      allow delete: if isEmailVerified() && isValidId(customerId);
+    }
+
+    // 5. Suppliers validation
+    function isValidSupplier(s) {
+      return s.keys().hasAll(['id', 'name', 'contactPerson', 'phone', 'address', 'payables'])
+        && s.id is string && s.id.size() <= 128
+        && s.name is string && s.name.size() <= 256
+        && s.contactPerson is string && s.contactPerson.size() <= 256
+        && s.phone is string && s.phone.size() <= 64
+        && s.address is string && s.address.size() <= 512
+        && s.payables is number && s.payables >= 0;
+    }
+
+    match /suppliers/{supplierId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(supplierId) && isValidSupplier(incoming()) && incoming().id == supplierId;
+      allow update: if isEmailVerified() && isValidId(supplierId) && isValidSupplier(incoming()) && incoming().id == supplierId;
+      allow delete: if isEmailVerified() && isValidId(supplierId);
+    }
+
+    // 6. Orders (Sales) validation
+    function isValidOrder(o) {
+      return o.keys().hasAll(['id', 'invoiceNumber', 'customerName', 'items', 'subtotal', 'discountAmount', 'taxAmount', 'total', 'paymentMethod', 'amountPaid', 'change', 'date', 'status'])
+        && o.id is string && o.id.size() <= 128
+        && o.invoiceNumber is string && o.invoiceNumber.size() <= 128
+        && o.customerName is string && o.customerName.size() <= 256
+        && o.items is list && o.items.size() <= 100
+        && o.subtotal is number && o.subtotal >= 0
+        && o.discountAmount is number && o.discountAmount >= 0
+        && o.taxAmount is number && o.taxAmount >= 0
+        && o.total is number && o.total >= 0
+        && o.paymentMethod is string && o.paymentMethod.size() <= 64
+        && o.amountPaid is number && o.amountPaid >= 0
+        && o.change is number && o.change >= 0
+        && o.date is string && o.date.size() <= 128
+        && o.status is string && (o.status == "completed" || o.status == "refunded" || o.status == "returned" || o.status == "partially_returned");
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(orderId) && isValidOrder(incoming()) && incoming().id == orderId;
+      allow update: if isEmailVerified() && isValidId(orderId) && isValidOrder(incoming()) && incoming().id == orderId
+        && (existing().status == "completed" || incoming().status == existing().status); // Lock terminal states / protect returned status changes
+      allow delete: if isEmailVerified() && isValidId(orderId);
+    }
+
+    // 7. Purchases validation
+    function isValidPurchase(pur) {
+      return pur.keys().hasAll(['id', 'invoiceNumber', 'supplierId', 'supplierName', 'items', 'total', 'date', 'paymentStatus', 'amountPaid'])
+        && pur.id is string && pur.id.size() <= 128
+        && pur.invoiceNumber is string && pur.invoiceNumber.size() <= 128
+        && pur.supplierId is string && pur.supplierId.size() <= 128
+        && pur.supplierName is string && pur.supplierName.size() <= 256
+        && pur.items is list && pur.items.size() <= 100
+        && pur.total is number && pur.total >= 0
+        && pur.date is string && pur.date.size() <= 128
+        && pur.paymentStatus is string && (pur.paymentStatus == "paid" || pur.paymentStatus == "partial" || pur.paymentStatus == "unpaid")
+        && pur.amountPaid is number && pur.amountPaid >= 0;
+    }
+
+    match /purchases/{purchaseId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(purchaseId) && isValidPurchase(incoming()) && incoming().id == purchaseId;
+      allow update: if isEmailVerified() && isValidId(purchaseId) && isValidPurchase(incoming()) && incoming().id == purchaseId;
+      allow delete: if isEmailVerified() && isValidId(purchaseId);
+    }
+
+    // 8. Expenses validation
+    function isValidExpense(exp) {
+      return exp.keys().hasAll(['id', 'description', 'amount', 'category', 'date'])
+        && exp.id is string && exp.id.size() <= 128
+        && exp.description is string && exp.description.size() <= 512
+        && exp.amount is number && exp.amount >= 0
+        && exp.category is string && exp.category.size() <= 128
+        && exp.date is string && exp.date.size() <= 128;
+    }
+
+    match /expenses/{expenseId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(expenseId) && isValidExpense(incoming()) && incoming().id == expenseId;
+      allow update: if isEmailVerified() && isValidId(expenseId) && isValidExpense(incoming()) && incoming().id == expenseId;
+      allow delete: if isEmailVerified() && isValidId(expenseId);
+    }
+
+    // 9. Movements validation
+    function isValidMovement(m) {
+      return m.keys().hasAll(['id', 'productId', 'productName', 'type', 'quantity', 'date'])
+        && m.id is string && m.id.size() <= 128
+        && m.productId is string && m.productId.size() <= 128
+        && m.productName is string && m.productName.size() <= 256
+        && m.type is string && (m.type == "in" || m.type == "out" || m.type == "adjust")
+        && m.quantity is number && m.quantity >= 0
+        && m.date is string && m.date.size() <= 128;
+    }
+
+    match /movements/{movementId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(movementId) && isValidMovement(incoming()) && incoming().id == movementId;
+      allow update: if isEmailVerified() && isValidId(movementId) && isValidMovement(incoming()) && incoming().id == movementId;
+      allow delete: if isEmailVerified() && isValidId(movementId);
+    }
+
+    // 10. Settings validation
+    function isValidCompanySettings(s) {
+      return s.keys().hasAll(['name', 'logo', 'phone', 'address', 'taxNumber', 'taxRate', 'currencySymbol', 'invoiceNotes'])
+        && s.name is string && s.name.size() <= 256
+        && s.logo is string && s.logo.size() <= 64
+        && s.phone is string && s.phone.size() <= 64
+        && s.address is string && s.address.size() <= 512
+        && s.taxNumber is string && s.taxNumber.size() <= 128
+        && s.taxRate is number && s.taxRate >= 0
+        && s.currencySymbol is string && s.currencySymbol.size() <= 32
+        && s.invoiceNotes is string && s.invoiceNotes.size() <= 1024;
+    }
+
+    function isValidActiveSession(s) {
+      return s.keys().hasAll(['activeUserId'])
+        && s.activeUserId is string && s.activeUserId.size() <= 128;
+    }
+
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
+      allow create, update: if isEmailVerified() && isValidId(settingId) && (
+        (settingId == "company" && isValidCompanySettings(incoming())) ||
+        (settingId == "active_session" && isValidActiveSession(incoming()))
+      );
+      allow delete: if isEmailVerified() && isValidId(settingId);
+    }
+
+    // 11. Users list validation
+    function isValidUser(u) {
+      return u.keys().hasAll(['id', 'name', 'username', 'phone', 'pinCode', 'role', 'permissions'])
+        && u.id is string && u.id.size() <= 128
+        && u.name is string && u.name.size() <= 256
+        && u.username is string && u.username.size() <= 128
+        && u.phone is string && u.phone.size() <= 64
+        && u.pinCode is string && u.pinCode.size() <= 32
+        && u.role is string && (u.role == "admin" || u.role == "manager" || u.role == "cashier")
+        && u.permissions is map
+        && u.permissions.keys().hasAll(['dashboard', 'pos', 'products', 'categories', 'customers', 'suppliers', 'inventory', 'purchases', 'sales', 'expenses', 'reports', 'settings', 'editInvoices', 'returnItems'])
+        && u.permissions.dashboard is bool
+        && u.permissions.pos is bool
+        && u.permissions.products is bool
+        && u.permissions.categories is bool
+        && u.permissions.customers is bool
+        && u.permissions.suppliers is bool
+        && u.permissions.inventory is bool
+        && u.permissions.purchases is bool
+        && u.permissions.sales is bool
+        && u.permissions.expenses is bool
+        && u.permissions.reports is bool
+        && u.permissions.settings is bool
+        && u.permissions.editInvoices is bool
+        && u.permissions.returnItems is bool;
+    }
+
+    match /users_list/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isEmailVerified() && isValidId(userId) && isValidUser(incoming()) && incoming().id == userId;
+      allow update: if isEmailVerified() && isValidId(userId) && isValidUser(incoming()) && incoming().id == userId;
+      allow delete: if isEmailVerified() && isValidId(userId);
+    }
+  }
+}
