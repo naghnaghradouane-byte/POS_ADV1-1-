@@ -261,8 +261,9 @@ export default function App() {
         // Upload local data to provision brand-new account storage
         await uploadAllToFirebase(state);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Data Sync failed: ', e);
+      throw e; // re-throw so the UI showLoginModal captures block errors
     } finally {
       setSyncing(false);
     }
@@ -896,7 +897,7 @@ export default function App() {
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="p-2 sm:px-3.5 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-605 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2"
-              title={theme === 'dark' ? 'تفعيل الوضع المضيء' : 'تفعيل الوضع الداكن'}
+              title={theme === 'dark' ? "Désactiver le Mode Sombre" : "Activer le Mode Sombre"}
               id="theme-toggle-btn"
             >
               {theme === 'dark' ? (
@@ -935,17 +936,19 @@ export default function App() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className={`bg-white rounded-3xl w-full max-w-[340px] sm:max-w-md overflow-hidden shadow-2xl border border-slate-100 text-slate-800 flex flex-col text-start animate-scale-up`}
+              className="bg-white rounded-3xl w-full max-w-[340px] sm:max-w-md overflow-hidden shadow-2xl border border-slate-100 text-slate-800 flex flex-col text-left animate-scale-up"
+              dir="ltr"
             >
               {/* Header */}
-              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+              <div className="p-4 bg-slate-900 text-white flex items-center justify-between shrink-0 text-left">
                 <div className="flex items-center gap-2">
                   <Cloud size={16} className="text-emerald-400 animate-pulse" />
-                  <span className="font-bold text-xs sm:text-sm">
-                    {lang === 'ar' ? 'بوابة المزامنة السحابية • Sync Portal' : 'Portail de Synchronisation Cloud'}
+                  <span className="font-bold text-xs sm:text-sm text-left">
+                    Portail de Synchronisation Cloud
                   </span>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowLoginModal(false)}
                   className="text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 w-6 h-6 flex items-center justify-center text-xs cursor-pointer"
                 >
@@ -954,70 +957,70 @@ export default function App() {
               </div>
 
               {/* Modal Body */}
-              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[80vh]">
+              <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[80vh] text-left">
                 {authError && (
-                  <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-xs text-red-700 flex items-start gap-2 leading-relaxed text-start">
+                  <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-xs text-red-700 flex items-start gap-2 leading-relaxed text-left font-sans animate-fade-in">
                     <ShieldAlert size={16} className="shrink-0 text-red-500 mt-0.5" />
                     <span>{authError}</span>
                   </div>
                 )}
 
                 {/* Login/Register Form */}
-                <form onSubmit={isRegisterMode ? handleEmailRegisterInline : handleEmailSignInInline} className="space-y-4">
+                <form onSubmit={isRegisterMode ? handleEmailRegisterInline : handleEmailSignInInline} className="space-y-4 text-left">
                   {isRegisterMode && (
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-500 block text-start">
-                        {lang === 'ar' ? 'اسم المتجر أو المالك:' : 'Nom de l\'établissement / propriétaire :'}
+                    <div className="space-y-1 text-left">
+                      <label className="text-[11px] font-bold text-slate-500 block text-left">
+                        Nom de l'établissement / propriétaire :
                       </label>
                       <div className="relative">
-                        <UserIcon size={14} className={`absolute ${lang === 'ar' ? 'right-3.5' : 'left-3.5'} top-3.5 text-slate-400`} />
+                        <UserIcon size={14} className="absolute left-3.5 top-3.5 text-slate-400" />
                         <input
                           type="text"
                           value={authName}
                           onChange={(e) => setAuthName(e.target.value)}
-                          className={`w-full ${lang === 'ar' ? 'pr-10 pl-3 text-right' : 'pl-10 pr-3 text-left'} py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed font-bold`}
-                          placeholder={lang === 'ar' ? 'مثال: سوبرماركت البرق' : 'Ex : Supermarché Éclair'}
+                          className="w-full pl-10 pr-3 text-left py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed font-bold animate-fade-in"
+                          placeholder="Ex : Supermarché Éclair"
                           required
                         />
                       </div>
                     </div>
                   )}
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500 block text-start">
-                      {lang === 'ar' ? 'البريد الإلكتروني للقرص السحابي:' : 'Adresse e-mail Cloud :'}
+                  <div className="space-y-1 text-left">
+                    <label className="text-[11px] font-bold text-slate-500 block text-left">
+                      Adresse e-mail de connexion :
                     </label>
                     <div className="relative">
-                      <Mail size={14} className={`absolute ${lang === 'ar' ? 'right-3.5' : 'left-3.5'} top-3.5 text-slate-400`} />
+                      <Mail size={14} className="absolute left-3.5 top-3.5 text-slate-400" />
                       <input
                         type="email"
                         value={authEmail}
                         onChange={(e) => setAuthEmail(e.target.value)}
-                        className={`w-full ${lang === 'ar' ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed text-left font-mono`}
-                        placeholder="name@owner.com"
+                        className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed text-left font-mono"
+                        placeholder="nom@entreprise.com"
                         required
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500 block text-start">
-                      {lang === 'ar' ? 'كلمة المرور السحابية:' : 'Mot de passe Cloud :'}
+                  <div className="space-y-1 text-left">
+                    <label className="text-[11px] font-bold text-slate-500 block text-left">
+                      Mot de passe du compte :
                     </label>
                     <div className="relative">
-                      <Lock size={14} className={`absolute ${lang === 'ar' ? 'right-3.5' : 'left-3.5'} top-3.5 text-slate-400`} />
+                      <Lock size={14} className="absolute left-3.5 top-3.5 text-slate-400" />
                       <input
                         type={showPassword ? 'text' : 'password'}
                         value={authPass}
                         onChange={(e) => setAuthPass(e.target.value)}
-                        className={`w-full ${lang === 'ar' ? 'pr-10 pl-10' : 'pl-10 pr-10'} py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed text-left font-mono`}
+                        className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/10 focus:outline-none transition leading-relaxed text-left font-mono"
                         placeholder="••••••••"
                         required
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} top-2.5 text-slate-400 hover:text-slate-600 p-1 rounded-md`}
+                        className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 p-1 rounded-md"
                       >
                         {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
@@ -1036,8 +1039,8 @@ export default function App() {
                     )}
                     <span>
                       {isRegisterMode 
-                        ? (lang === 'ar' ? 'إنشاء حساب جديد وتفعيل المزامنة' : 'Créer un compte et activer la synchro')
-                        : (lang === 'ar' ? 'تسجيل الدخول ومزامنة النظام' : 'Se connecter et synchroniser')}
+                        ? 'Créer un compte et activer la synchro'
+                        : 'Se connecter et synchroniser'}
                     </span>
                   </button>
                 </form>
@@ -1045,6 +1048,7 @@ export default function App() {
                 {/* Toggle Login/Register */}
                 <div className="text-center pt-2">
                   <button
+                    type="button"
                     onClick={() => {
                       setIsRegisterMode(!isRegisterMode);
                       setAuthError(null);
@@ -1052,8 +1056,8 @@ export default function App() {
                     className="text-xs text-indigo-650 hover:text-indigo-800 font-bold underline transition"
                   >
                     {isRegisterMode 
-                      ? (lang === 'ar' ? 'لديك حساب بالفعل؟ سجل دخولك من هنا' : 'Déjà un compte ? Connectez-vous ici')
-                      : (lang === 'ar' ? 'ليس لديك حساب سحابي؟ سجل منشأتك مجاناً الآن' : 'Pas de compte Cloud ? Enregistrez-vous gratuitement')}
+                      ? 'Déjà un compte ? Connectez-vous ici'
+                      : 'Créer un nouveau compte Cloud gratuit'}
                   </button>
                 </div>
 
@@ -1061,7 +1065,7 @@ export default function App() {
                 <div className="relative my-3 flex py-1 items-center">
                   <div className="flex-grow border-t border-slate-150"></div>
                   <span className="flex-shrink mx-3 text-[10px] text-slate-400 font-bold uppercase font-mono">
-                    {lang === 'ar' ? 'أو عن طريق جوجل' : 'OU VIA GOOGLE'}
+                    OU VIA GOOGLE
                   </span>
                   <div className="flex-grow border-t border-slate-150"></div>
                 </div>
@@ -1071,7 +1075,7 @@ export default function App() {
                   onClick={handleGoogleSignInInline}
                   disabled={authWorking}
                   type="button"
-                  className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl border border-slate-205 text-xs shadow-xs transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                  className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-bold rounded-xl border border-slate-205 text-xs shadow-xs transition flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer text-left"
                 >
                   {authWorking ? (
                     <Loader2 size={13} className="animate-spin text-slate-500" />
@@ -1095,35 +1099,27 @@ export default function App() {
                       />
                     </svg>
                   )}
-                  <span>{lang === 'ar' ? 'الدخول السريع بحساب Google' : 'Connexion rapide avec Google'}</span>
+                  <span>Connexion rapide avec Google</span>
                 </button>
 
                 {/* Custom Firebase Setup Toggle inside Modal */}
-                <div className="pt-2 border-t border-slate-100 flex flex-col items-center">
+                <div className="pt-2 border-t border-slate-100 flex flex-col items-center w-full">
                   <button
                     type="button"
                     onClick={() => setShowModalCustomFirebase(!showModalCustomFirebase)}
                     className="text-[11px] text-slate-500 hover:text-indigo-650 font-black underline flex items-center gap-1 transition"
                   >
                     <Settings size={12} />
-                    <span>{lang === 'ar' ? 'أو ربط خادم سحابي مخصص لقاعدة بياناتك الخاصّة' : 'Ou connecter un serveur Cloud personnalisé'}</span>
+                    <span>Lier un serveur Cloud Firebase personnalisé</span>
                   </button>
 
                   {showModalCustomFirebase && (
-                    <div className="w-full mt-3 p-3 bg-slate-50 border border-slate-205 rounded-2xl text-start space-y-2.5 animate-scale-up">
-                      <span className="text-[10px] font-bold text-slate-700 block">
-                        {lang === 'ar' 
-                          ? 'ألصق كود الـ Config المُستخرج من لوحة تحكم Firebase (JSON أو جافاسكريبت):' 
-                          : 'Collez le code de configuration (Config JS/JSON) Firebase :'}
+                    <div className="w-full mt-3 p-3 bg-slate-50 border border-slate-205 rounded-2xl text-left space-y-2.5 animate-scale-up">
+                      <span className="text-[10px] font-bold text-slate-700 block text-left">
+                        Collez le code de configuration (Config JS/JSON) Firebase :
                       </span>
                       <textarea
-                        placeholder={lang === 'ar' ? `مثال على الكود المقبول:
-const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "...",
-  projectId: "...",
-  appId: "..."
-};` : `Exemple de code accepté :
+                        placeholder={`Exemple de code accepté :
 const firebaseConfig = {
   apiKey: "AIzaSy...",
   authDomain: "...",
@@ -1141,7 +1137,7 @@ const firebaseConfig = {
                       />
                       
                       {customFirebaseError && (
-                        <div className="p-2.5 bg-red-50 border border-red-150 rounded-lg text-[10px] text-red-650 font-bold leading-normal text-left">
+                        <div className="p-2.5 bg-red-50 border border-red-150 rounded-lg text-[10px] text-red-650 font-bold leading-normal text-left font-sans">
                           {customFirebaseError}
                         </div>
                       )}
@@ -1152,15 +1148,11 @@ const firebaseConfig = {
                         className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-[11px] shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <CheckCircle2 size={13} />
-                        <span>
-                          {lang === 'ar' ? 'تأكيد المعايير وربط خادمي الخاص' : 'Valider et connecter mon serveur'}
-                        </span>
+                        <span>Valider et connecter mon serveur</span>
                       </button>
 
-                      <p className="text-[9px] text-slate-400 leading-normal text-left">
-                        {lang === 'ar' 
-                          ? 'ملاحظة: يدعم مفكك الرموز الذكي كلاً من الصيغ النصية البسيطة والرموز المركبة البرمجية. بعد الحفظ، يُعاد تشغيل النظام للاتصال بسيرفرك.' 
-                          : 'Note : Notre parseur intelligent prend en charge les formats JSON, JS et textuels complexes de Firebase. L\'application sera redémarrée automatiquement.'}
+                      <p className="text-[9px] text-slate-400 leading-normal text-left font-sans">
+                        Note : Notre décodeur intelligent prend en charge aussi bien les formats JSON bruts que les scripts JavaScript. Après la validation, l'application redémarrera pour se connecter.
                       </p>
                     </div>
                   )}

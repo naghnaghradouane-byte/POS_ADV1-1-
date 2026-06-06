@@ -19,17 +19,51 @@ export function getActiveFirebaseConfig() {
   return firebaseConfig;
 }
 
-const activeConfig = getActiveFirebaseConfig();
+let activeConfig = firebaseConfig;
+try {
+  activeConfig = getActiveFirebaseConfig();
+} catch (e) {
+  console.error('Error loading active Firebase configuration:', e);
+}
 
-// Initialize Firebase SDK
-const app = getApps().length === 0 ? initializeApp(activeConfig) : getApp();
+// Safely initialize App and Services to prevent app-wide crashes
+let app;
+try {
+  app = getApps().length === 0 ? initializeApp(activeConfig) : getApp();
+} catch (error) {
+  console.error("Failed to initialize Firebase with active config, falling back to default:", error);
+  try {
+    localStorage.removeItem('CUSTOM_FIREBASE_CONFIG'); // remove broken config
+    app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+  } catch (fallbackError) {
+    console.error("Failed to initialize Firebase with fallback config:", fallbackError);
+  }
+}
 
-// Initialize Services
-export const db = activeConfig.firestoreDatabaseId 
-  ? getFirestore(app, activeConfig.firestoreDatabaseId) 
-  : getFirestore(app);
+// Initialize Services with backup options
+let dbInstance;
+try {
+  dbInstance = activeConfig.firestoreDatabaseId 
+    ? getFirestore(app, activeConfig.firestoreDatabaseId) 
+    : getFirestore(app);
+} catch (e) {
+  console.error("Failed to initialize Firestore database:", e);
+  try {
+    dbInstance = getFirestore(app);
+  } catch (err) {
+    console.error("Critical Firestore failure:", err);
+  }
+}
 
-export const auth = getAuth(app);
+let authInstance;
+try {
+  authInstance = getAuth(app);
+} catch (e) {
+  console.error("Failed to initialize Auth instance:", e);
+}
+
+export const db = dbInstance;
+export const auth = authInstance;
 export const googleProvider = new GoogleAuthProvider();
 
 // Google popup authorization
