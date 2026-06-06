@@ -703,7 +703,14 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [lang, setLang] = useState<Lang>(() => {
-    return (localStorage.getItem('POS_LANG') as Lang) || 'ar';
+    const saved = localStorage.getItem('POS_LANG');
+    const upgraded = localStorage.getItem('POS_LANG_UPGRADED_V2');
+    if (!upgraded) {
+      localStorage.setItem('POS_LANG_UPGRADED_V2', 'yes');
+      localStorage.setItem('POS_LANG', 'fr');
+      return 'fr';
+    }
+    return (saved as Lang) || 'fr';
   });
 
   useEffect(() => {
