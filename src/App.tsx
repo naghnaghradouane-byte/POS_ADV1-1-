@@ -2,7 +2,7 @@ import React from 'react';
 import { ERPState, Product, Category, Customer, Supplier, Order, Purchase, Expense, InventoryMovement, CompanySettings, SystemUser } from './types';
 import { initialERPState } from './data/initialData';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { auth, loginWithGoogle, loginWithEmail, registerWithEmail, logoutUser, db } from './lib/firebase';
+import { auth, loginWithGoogle, getGoogleRedirectResult, loginWithEmail, registerWithEmail, logoutUser, db, testFirebaseConfigDirect, firebaseInitError } from './lib/firebase';
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { uploadAllToFirebase, downloadAllFromFirebase } from './lib/firebaseSync';
 import { motion, AnimatePresence } from 'motion/react';
@@ -61,11 +61,15 @@ export default function App() {
   const [authError, setAuthError] = React.useState<string | null>(null);
   const [showPassword, setShowPassword] = React.useState<boolean>(false);
   const [authWorking, setAuthWorking] = React.useState<boolean>(false);
+  const [authIsUnauthorizedDomain, setAuthIsUnauthorizedDomain] = React.useState<boolean>(false);
+  const [copiedDomain, setCopiedDomain] = React.useState<boolean>(false);
 
   // Custom Firebase configuration states inside the log in popup
   const [showModalCustomFirebase, setShowModalCustomFirebase] = React.useState<boolean>(false);
   const [modalRawJsonInput, setModalRawJsonInput] = React.useState<string>('');
   const [customFirebaseError, setCustomFirebaseError] = React.useState<string | null>(null);
+  const [testingCustomFirebase, setTestingCustomFirebase] = React.useState<boolean>(false);
+  const [testResult, setTestResult] = React.useState<{ success: boolean; message: string; details?: string } | null>(null);
   const [state, setState] = React.useState<ERPState>(() => {
     // Attempt local storage loading for durable offline preservation
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -88,8 +92,29 @@ export default function App() {
     return initialERPState;
   });
 
-  // Track user login state changes
+  // Track user login state, redirect results and sync on mount
   React.useEffect(() => {
+    const handleInitialAuth = async () => {
+      try {
+        const redirectedUser = await getGoogleRedirectResult();
+        if (redirectedUser) {
+          setUser(redirectedUser);
+          await syncOnLoginSuccess(redirectedUser);
+        }
+      } catch (error: any) {
+        console.error('Failed to resolve Google redirect path:', error);
+        const isUnauthorized = error?.code === 'auth/unauthorized-domain' || 
+          (error?.message && error?.message.includes('unauthorized-domain'));
+        if (isUnauthorized) {
+          setAuthIsUnauthorizedDomain(true);
+        }
+        setAuthError(error.message || (lang === 'ar' ? 'فشل تسجيل الدخول عبر حساب جوجل.' : 'Échec de la connexion via Google.'));
+        setShowLoginModal(true);
+      }
+    };
+
+    handleInitialAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (usr) => {
       setUser(usr);
     });
@@ -182,9 +207,10 @@ export default function App() {
     }
   }, [state.activeUserId, currentView, activeUser]);
 
-  // Smart/Flexible custom Firebase configuration parser and validator
-  const handleValidateCustomFirebase = () => {
+  // Smart/Flexible custom Firebase configuration parser, validator, and connection tester
+  const handleValidateCustomFirebase = async () => {
     setCustomFirebaseError(null);
+    setTestResult(null);
     const val = modalRawJsonInput.trim();
     if (!val) {
       setCustomFirebaseError(lang === 'ar' ? 'يرجى لصق كود الإعداد أولاً.' : 'Veuillez d\'abord coller la configuration.');
@@ -226,11 +252,29 @@ export default function App() {
 
     // Check if the critical configuration fields are present
     if (config.apiKey && config.projectId && config.appId) {
-      localStorage.setItem('CUSTOM_FIREBASE_CONFIG', JSON.stringify(config));
-      alert(lang === 'ar' 
-        ? '🟢 تم ربط خادمك الخاص بنجاح! سيتم إعادة تحديث النظام تلقائياً للبدء بالعمل على خادمك الجديد...' 
-        : '🟢 Serveur Firebase personnalisé connecté avec succès ! L\'application va redémarrer...');
-      window.location.reload();
+      try {
+        setTestingCustomFirebase(true);
+        const result = await testFirebaseConfigDirect(config);
+        setTestResult(result);
+        if (result.success) {
+          localStorage.setItem('CUSTOM_FIREBASE_CONFIG', JSON.stringify(config));
+          // Success feedback showing result to user before loading
+          setTimeout(() => {
+            alert(lang === 'ar' 
+              ? '🟢 تم اختبار وربط السيرفر بنجاح! سيتم إعادة تحديث النظام تلقائياً للبدء بالعمل على خادمك الجديد...' 
+              : '🟢 Serveur Firebase personnalisé connecté avec succès ! L\'application va redémarrer...');
+            window.location.reload();
+          }, 2000);
+        } else {
+          setCustomFirebaseError(lang === 'ar' 
+            ? `⚠️ فشل الاتصال بقاعدة البيانات. التفاصيل: ${result.details}`
+            : `⚠️ Échec de la connexion. Détails : ${result.details}`);
+        }
+      } catch (testErr: any) {
+        setCustomFirebaseError(testErr?.message || String(testErr));
+      } finally {
+        setTestingCustomFirebase(false);
+      }
     } else {
       setCustomFirebaseError(lang === 'ar' 
         ? '⚠️ الكود المُلصق غير صحيح أو تنقصه بعض الحقول الأساسية (مثل apiKey, projectId, appId).' 
@@ -272,6 +316,7 @@ export default function App() {
   // Google Sign-In with automatic sync integration
   const handleLogin = async () => {
     setAuthError(null);
+    setAuthIsUnauthorizedDomain(false);
     setIsRegisterMode(false);
     setAuthEmail('');
     setAuthPass('');
@@ -282,15 +327,24 @@ export default function App() {
   const handleGoogleSignInInline = async () => {
     try {
       setAuthWorking(true);
-      setAuthError(null);
-      const usr = await loginWithGoogle();
-      if (usr) {
-        await syncOnLoginSuccess(usr);
+      setAuthIsUnauthorizedDomain(false);
+      setAuthError(lang === 'ar' 
+        ? 'جاري توجيهك إلى صفحة تسجيل الدخول من جوجل... يرجى الانتظار.' 
+        : 'Redirection vers la page de connexion Google... Veuillez patienter.');
+      const loggedUser = await loginWithGoogle();
+      if (loggedUser) {
+        setUser(loggedUser);
+        await syncOnLoginSuccess(loggedUser);
         setShowLoginModal(false);
       }
     } catch (e: any) {
-      setAuthError(e.message || (lang === 'ar' ? 'فشل تسجيل الدخول عبر حساب جوجل.' : 'Échec de la connexion via Google.'));
-    } finally {
+      console.error('Google authorization error:', e);
+      const isUnauthorized = e?.code === 'auth/unauthorized-domain' || 
+        (e?.message && e?.message.includes('unauthorized-domain'));
+      if (isUnauthorized) {
+        setAuthIsUnauthorizedDomain(true);
+      }
+      setAuthError(e.message || (lang === 'ar' ? 'فشل بدء تسجيل الدخول عبر حساب جوجل.' : 'Échec de la connexion via Google.'));
       setAuthWorking(false);
     }
   };
@@ -853,6 +907,40 @@ export default function App() {
 
       {/* Main viewport area layout */}
       <main className="flex-1 overflow-y-auto h-screen p-4 sm:p-6 lg:p-8 space-y-6">
+        {firebaseInitError && (
+          <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-rose-800 text-xs font-medium max-w-7xl mx-auto">
+            <div>
+              <span className="font-extrabold text-rose-900 block mb-0.5">⚠️ خطأ في تشغيل السيرفر المخصص / Erreur d'initialisation</span>
+              تفاصيل الخطأ: {firebaseInitError}
+            </div>
+            <button
+              onClick={() => {
+                localStorage.removeItem('CUSTOM_FIREBASE_CONFIG');
+                window.location.reload();
+              }}
+              className="px-3.5 py-1.5 bg-rose-150 hover:bg-rose-200 text-rose-800 rounded-xl font-bold shrink-0 transition cursor-pointer"
+            >
+              إعادة ضبط للوضع التلقائي / Réinitialiser
+            </button>
+          </div>
+        )}
+
+        {localStorage.getItem('CUSTOM_FIREBASE_CONFIG') && !user && !firebaseInitError && (
+          <div className="p-4 bg-indigo-50/70 border border-indigo-150 rounded-2xl flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-indigo-805 text-xs font-medium max-w-7xl mx-auto">
+            <div className="space-y-1">
+              <span className="font-extrabold text-indigo-950 block">🟢 تم ربط خادمك الخاص بنجاح! السيرفر نشط حالياً</span>
+              <p className="text-slate-500 font-bold leading-normal">
+                لكن لم يتم مصادقتك على هذا الخادم بعد. للبدء بمزامنة الفواتير والمنتجات سحابياً، تفضل بـ <button onClick={handleLogin} className="text-indigo-600 hover:text-indigo-800 font-black underline cursor-pointer">تسجيل الدخول</button> أو إنشاء حساب جديد على خادمك الخاص.
+              </p>
+            </div>
+            <button
+              onClick={handleLogin}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shrink-0 transition shadow-sm cursor-pointer"
+            >
+              تسجيل الدخول للسيرفر الخاص
+            </button>
+          </div>
+        )}
         {/* Breadcrumb row header */}
         <div className="flex justify-between items-center bg-white dark:bg-slate-900 px-5 py-3 rounded-2xl border border-slate-200/60 dark:border-slate-800/80 shadow-sm dark:shadow-none shrink-0 transition-colors duration-200">
           <div className="space-y-0.5">
@@ -959,9 +1047,125 @@ export default function App() {
               {/* Modal Body */}
               <div className="p-5 sm:p-6 space-y-4 overflow-y-auto max-h-[80vh] text-left">
                 {authError && (
-                  <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-xs text-red-700 flex items-start gap-2 leading-relaxed text-left font-sans animate-fade-in">
-                    <ShieldAlert size={16} className="shrink-0 text-red-500 mt-0.5" />
-                    <span>{authError}</span>
+                  <div className="space-y-2 font-sans animate-fade-in">
+                    <div className="p-3 bg-red-50 border border-red-150 rounded-xl text-xs text-red-700 flex items-start gap-2 leading-relaxed text-left">
+                      <ShieldAlert size={16} className="shrink-0 text-red-500 mt-0.5" />
+                      <span>{authError}</span>
+                    </div>
+
+                    {/* Highly supportive tips for invalid-credential or user-not-found to prevent frustration */}
+                    {(authError.toLowerCase().includes('credential') || authError.toLowerCase().includes('password') || authError.toLowerCase().includes('user-not-found') || authError.toLowerCase().includes('incorrect') || authError.toLowerCase().includes('invalid')) && (
+                      <div className="p-3 bg-indigo-50/75 border border-indigo-150 rounded-xl text-[11px] text-slate-700 space-y-2 leading-relaxed text-left">
+                        <div className="font-bold text-indigo-750 flex items-center gap-1.5">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                          <span>{lang === 'ar' ? 'إليك طرق الحل السريعة:' : 'Conseils pour résoudre ce problème :'}</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-1.5 pl-1 text-[10.5px] text-slate-650">
+                          <li>
+                            <strong className="text-indigo-850">
+                              {lang === 'ar' ? 'هل تملك حساباً بالفعل؟' : 'Avez-vous déjà créé un compte ?'}
+                            </strong>{' '}
+                            {lang === 'ar' 
+                              ? 'إذا كانت هذه أول مرة تستخدم فيها التطبيق أو قمت بتغيير مخدم السحاب، فيرجى الضغط على زر "إنشاء حساب سحابي مجاني جديد" بالأسفل لإنشاء حساب جديد أولاً.'
+                              : 'S\'il s\'agit de votre première utilisation ou si vous venez de lier un nouveau serveur, veuillez cliquer sur "Créer un nouveau compte Cloud gratuit" ci-dessous pour vous enregistrer.'
+                            }
+                          </li>
+                          <li>
+                            <strong className="text-indigo-850">
+                              {lang === 'ar' ? 'تفعيل ميزة تسجيل الدخول بالبريد:' : 'Activer la connexion par e-mail :'}
+                            </strong>{' '}
+                            {lang === 'ar'
+                              ? 'إذا كنت تستخدم كونسول Firebase الخاص بك، فتأكد من تفعيل "Email/Password" تحت قائمة Authentication -> Sign-in method.'
+                              : 'Si vous utilisez votre propre serveur Firebase, assurez-vous d\'activer le fournisseur "Email/Password" dans Authentication -> Sign-in method.'
+                            }
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Highly supportive tips for auth/internal-error or popup-blocked */}
+                    {(authError.toLowerCase().includes('internal-error') || authError.toLowerCase().includes('popup') || authError.toLowerCase().includes('blocked') || authError.toLowerCase().includes('cookie') || authError.toLowerCase().includes('network') || authError.toLowerCase().includes('auth/')) && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-slate-700 space-y-2 leading-relaxed text-left">
+                        <div className="font-bold text-amber-800 flex items-center gap-1.5">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                          <span>{lang === 'ar' ? 'تجاوز مشكلة الحظر أو المتصفح:' : 'Résoudre le blocage du navigateur :'}</span>
+                        </div>
+                        <ul className="list-disc list-inside space-y-1.5 pl-1 text-[10.5px] text-slate-650">
+                          <li>
+                            <strong className="text-amber-900">
+                              {lang === 'ar' ? 'افتح التطبيق في نافذة مستقلة:' : 'Ouvrir l\'application dans un nouvel onglet :'}
+                            </strong>{' '}
+                            {lang === 'ar' 
+                              ? 'الوضع التجريبي الحالي داخل إطار (Iframe) يمنع أحياناً ملفات تعريف الارتباط من جوجل. يرجى الضغط على زر "فتح في لسان جديد" (أعلى يمين الشاشة) لتسجيل الدخول مباشرة وبشكل طبيعي.'
+                              : "L'environnement d'aperçu actuel (Iframe) bloque parfois les popups ou cookies tiers Google. Veuillez cliquer sur l'icône de flèche externe (en haut à droite de l'écran) pour ouvrir l'application dans un nouvel onglet et vous connecter de manière fluide."
+                            }
+                          </li>
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {authIsUnauthorizedDomain && (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-slate-700 space-y-3 leading-relaxed text-left font-sans animate-fade-in">
+                    <div className="flex items-center gap-2 text-amber-700 font-bold">
+                      <ShieldAlert size={18} className="shrink-0 text-amber-500" />
+                      <span>Configuration Firebase requise ! / إعداد Firebase مطلوب</span>
+                    </div>
+                    
+                    <div className="space-y-2 text-slate-650">
+                      <p className="font-semibold text-[11px] text-amber-850">
+                        {lang === 'ar' 
+                          ? 'هذا النطاق (Domain) غير مضاف في قائمة النطاقات المصرح بها في كونسول Firebase الخاص بك.'
+                          : "Ce domaine n'est pas répertorié dans la liste des domaines autorisés de votre projet Firebase."
+                        }
+                      </p>
+                      
+                      <div className="bg-slate-50 p-2 rounded-xl text-[10px] font-mono border border-slate-150 flex items-center justify-between gap-2 overflow-x-auto">
+                        <span className="font-bold text-slate-650 shrink-0">{window.location.hostname}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(window.location.hostname);
+                            setCopiedDomain(true);
+                            setTimeout(() => setCopiedDomain(false), 2000);
+                          }}
+                          className={`px-2 py-1 rounded text-[9px] font-bold uppercase transition shrink-0 ${
+                            copiedDomain 
+                              ? 'bg-emerald-500 text-white' 
+                              : 'bg-indigo-50 text-indigo-750 hover:bg-indigo-100 cursor-pointer'
+                          }`}
+                        >
+                          {copiedDomain ? (lang === 'ar' ? 'تم النسخ!' : 'Copié !') : (lang === 'ar' ? 'نسخ' : 'Copier')}
+                        </button>
+                      </div>
+
+                      <div className="space-y-1 pl-1 text-[11px] text-slate-600">
+                        <p className="font-black text-slate-755">
+                          {lang === 'ar' ? 'خطوات الحل السهلة:' : 'Étapes simples de résolution :'}
+                        </p>
+                        <ol className="list-decimal list-inside space-y-1">
+                          <li>
+                            {lang === 'ar' 
+                              ? 'اذهب إلى كونسول Firebase الخاص بك.' 
+                              : 'Allez dans votre Firebase Console.'
+                            }
+                          </li>
+                          <li>
+                            {lang === 'ar' 
+                              ? 'ادخل إلى Authentication -> تبويب Settings -> ثم Authorized domains.' 
+                              : 'Allez dans Authentication -> onglet Settings -> Authorized domains.'
+                            }
+                          </li>
+                          <li>
+                            {lang === 'ar' 
+                              ? 'اضغط على (Add domain) والصق النطاق المنسوخ أعلاه.' 
+                              : 'Cliquez sur (Add domain) et collez le domaine copié ci-dessus.'
+                            }
+                          </li>
+                        </ol>
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1142,13 +1346,49 @@ const firebaseConfig = {
                         </div>
                       )}
 
+                      {testingCustomFirebase && (
+                        <div className="p-2.5 bg-blue-50/50 border border-blue-150 rounded-lg text-[10px] text-blue-650 font-bold leading-normal text-left font-sans flex items-center gap-1.5 animate-pulse">
+                          <Loader2 size={13} className="animate-spin text-blue-600 shrink-0" />
+                          <span>جاري اختبار الاتصال بقاعدة بيانات السحاب... / Test de connexion en cours...</span>
+                        </div>
+                      )}
+
+                      {testResult && testResult.success && (
+                        <div className="p-2.5 bg-emerald-50 border border-emerald-150 rounded-lg text-[10px] text-emerald-800 font-bold leading-normal text-left font-sans space-y-1">
+                          <p className="flex items-center gap-1">
+                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                            {lang === 'ar' 
+                              ? '🟢 تم اختبار الاتصال للمخدم بنجاح!' 
+                              : '🟢 Connexion au serveur testée avec succès !'}
+                          </p>
+                          <p className="text-[9px] text-emerald-600 font-medium">
+                            {testResult.message === 'connection_ok_auth_required' 
+                              ? (lang === 'ar' 
+                                  ? 'التشخيص: المنفذ نشط ومستعد للمزامنة. يرجى إنشاء حساب أو تسجيل دخول جديد فور إعادة البناء للربط.' 
+                                  : 'Statut : Prêt pour la synchronisation. Veuillez créer un compte ou vous connecter après le rechargement.')
+                              : (lang === 'ar' 
+                                  ? 'التشخيص: قاعدة البيانات مقروءة ومفتوحة بالكامل.' 
+                                  : 'Statut : Base de données entièrement accessible.')}
+                          </p>
+                        </div>
+                      )}
+
                       <button
                         type="button"
+                        disabled={testingCustomFirebase}
                         onClick={handleValidateCustomFirebase}
-                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-[11px] shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-extrabold rounded-xl text-[11px] shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-60"
                       >
-                        <CheckCircle2 size={13} />
-                        <span>Valider et connecter mon serveur</span>
+                        {testingCustomFirebase ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <CheckCircle2 size={13} />
+                        )}
+                        <span>
+                          {testingCustomFirebase 
+                            ? (lang === 'ar' ? 'جاري التحقق من السيرفر...' : 'Vérification...') 
+                            : (lang === 'ar' ? 'اختبار وربط السيرفر السحابي' : 'Valider et connecter mon serveur')}
+                        </span>
                       </button>
 
                       <p className="text-[9px] text-slate-400 leading-normal text-left font-sans">

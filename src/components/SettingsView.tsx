@@ -1,6 +1,7 @@
 import React from 'react';
 import { CompanySettings } from '../types';
-import { Settings, Save, RefreshCw, Database, ShieldAlert, CheckCircle2, Cloud, Key, Clipboard } from 'lucide-react';
+import { Settings, Save, RefreshCw, Database, ShieldAlert, CheckCircle2, Cloud, Key, Clipboard, Loader2 } from 'lucide-react';
+import { testFirebaseConfigDirect } from '../lib/firebase';
 
 interface SettingsViewProps {
   settings: CompanySettings;
@@ -47,6 +48,8 @@ export default function SettingsView({
   const [customMeasurementId, setCustomMeasurementId] = React.useState(customFirebaseConfig?.measurementId || '');
   const [customFirestoreDatabaseId, setCustomFirestoreDatabaseId] = React.useState(customFirebaseConfig?.firestoreDatabaseId || '');
   const [rawJsonInput, setRawJsonInput] = React.useState('');
+  const [testing, setTesting] = React.useState(false);
+  const [testResult, setTestResult] = React.useState<{ success: boolean; message: string; details?: string } | null>(null);
 
   const handlePasteJSON = (jsonStr: string) => {
     try {
@@ -69,8 +72,9 @@ export default function SettingsView({
     }
   };
 
-  const handleSaveFirebaseConfig = (e: React.FormEvent) => {
+  const handleSaveFirebaseConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    setTestResult(null);
     if (!useCustomFirebase) {
       localStorage.removeItem('CUSTOM_FIREBASE_CONFIG');
       alert('تم إيقاف المخدم المخصص والعودة للسيرفر الافتراضي بنجاح! سيتم إعادة تحميل الصفحة الآن...');
@@ -94,9 +98,24 @@ export default function SettingsView({
       firestoreDatabaseId: customFirestoreDatabaseId || undefined,
     };
 
-    localStorage.setItem('CUSTOM_FIREBASE_CONFIG', JSON.stringify(config));
-    alert('🟢 تم حفظ إعدادات خادم Firebase الخاص بك بنجاح! سيتم إعادة تحميل النظام للربط والعمل على سحابتك مباشرةً.');
-    window.location.reload();
+    try {
+      setTesting(true);
+      const result = await testFirebaseConfigDirect(config);
+      setTestResult(result);
+      if (result.success) {
+        localStorage.setItem('CUSTOM_FIREBASE_CONFIG', JSON.stringify(config));
+        setTimeout(() => {
+          alert('🟢 تم فحص وحفظ خادم Firebase بنجاح! سيتم إعادة تحميل النظام للعمل على سحابتك مباشرةً.');
+          window.location.reload();
+        }, 2000);
+      } else {
+        alert(`❌ فشل الاتصال بقاعدة بيانات السحاب. تفاصيل الخطأ: ${result.details}`);
+      }
+    } catch (err: any) {
+      alert(`⚠️ خطأ غير متوقع أثناء فحص الهيكل: ${err?.message || err}`);
+    } finally {
+      setTesting(false);
+    }
   };
 
   const [simulatedLogs, setSimulatedLogs] = React.useState<string[]>([
@@ -420,14 +439,40 @@ export default function SettingsView({
                 </div>
               </div>
 
+              {testing && (
+                <div className="p-2.5 bg-blue-50/50 border border-blue-150 rounded-lg text-[10px] text-blue-650 font-bold leading-normal text-right flex items-center gap-1.5 animate-pulse">
+                  <Loader2 size={13} className="animate-spin text-blue-600 shrink-0" />
+                  <span>جاري اختبار الاتصال بقاعدة بيانات السحاب...</span>
+                </div>
+              )}
+
+              {testResult && testResult.success && (
+                <div className="p-2.5 bg-emerald-50 border border-emerald-150 rounded-lg text-[10px] text-emerald-800 font-bold leading-normal text-right space-y-0.5">
+                  <p className="flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                    <span>🟢 تم اختبار الاتصال للمخدم بنجاح!</span>
+                  </p>
+                  <p className="text-[9px] text-emerald-600 font-medium leading-relaxed">
+                    {testResult.message === 'connection_ok_auth_required' 
+                      ? 'التشخيص: المنفذ نشط ومستعد للمزامنة. يرجى إنشاء حساب أو تسجيل دخول جديد فور إعادة التحميل.' 
+                      : 'التشخيص: قاعدة البيانات مقروءة ومفتوحة بالكامل.'}
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <button
                   type="button"
+                  disabled={testing}
                   onClick={handleSaveFirebaseConfig}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold border-none transition flex items-center justify-center gap-1 cursor-pointer"
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold border-none transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-65"
                 >
-                  <Key size={13} />
-                  <span>حفظ وربط السحابة المخصصة</span>
+                  {testing ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Key size={13} />
+                  )}
+                  <span>{testing ? 'جاري التحقق والمزامنة...' : 'حفظ واختبار السحابة المخصصة'}</span>
                 </button>
               </div>
             </div>
