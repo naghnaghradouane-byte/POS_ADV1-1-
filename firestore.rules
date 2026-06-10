@@ -245,5 +245,36 @@ service cloud.firestore {
       allow update: if isEmailVerified() && isValidId(userId) && isValidUser(incoming()) && incoming().id == userId;
       allow delete: if isEmailVerified() && isValidId(userId);
     }
+
+    // 12. Free-trial guard collections
+    function isValidTrialPing(tp) {
+      return tp.keys().hasAll(['ping'])
+        && tp.ping != null;
+    }
+
+    function isValidTrialDevice(td) {
+      return td.keys().hasAll(['deviceId', 'trial_start_date', 'status', 'suspicious'])
+        && td.deviceId is string && td.deviceId.size() <= 128
+        && td.trial_start_date is string && td.trial_start_date.size() <= 128
+        && td.status is string && (td.status == "active" || td.status == "expired" || td.status == "suspicious")
+        && td.suspicious is bool
+        && (!td.keys().hasAny(['trial_limit_days']) || td.trial_limit_days is number)
+        && (!td.keys().hasAny(['last_ping']) || td.last_ping is string)
+        && (!td.keys().hasAny(['suspicion_reasons']) || td.suspicion_reasons is list)
+        && (!td.keys().hasAny(['activatedAt']) || td.activatedAt is string)
+        && (!td.keys().hasAny(['flaggedAt']) || td.flaggedAt is string);
+    }
+
+    match /trial_pings/{deviceId} {
+      allow read: if true;
+      allow create, update: if isValidId(deviceId) && isValidTrialPing(incoming());
+      allow delete: if false;
+    }
+
+    match /trial_devices/{deviceId} {
+      allow read: if true;
+      allow create, update: if isValidId(deviceId) && isValidTrialDevice(incoming()) && incoming().deviceId == deviceId;
+      allow delete: if false;
+    }
   }
 }

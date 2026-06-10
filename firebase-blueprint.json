@@ -227,6 +227,35 @@
         "activeUserId": { "type": "string" }
       },
       "required": ["activeUserId"]
+    },
+    "TrialDevice": {
+      "title": "TrialDevice",
+      "description": "Device registration state for free-trial restriction management",
+      "type": "object",
+      "properties": {
+        "deviceId": { "type": "string" },
+        "trial_start_date": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "expired", "suspicious"] },
+        "suspicious": { "type": "boolean" },
+        "suspicion_reasons": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "last_ping": { "type": "string" },
+        "trial_limit_days": { "type": "number" },
+        "activatedAt": { "type": "string" },
+        "flaggedAt": { "type": "string" }
+      },
+      "required": ["deviceId", "trial_start_date", "status", "suspicious"]
+    },
+    "TrialPing": {
+      "title": "TrialPing",
+      "description": "Transient ping document to evaluate absolute secure server datetime",
+      "type": "object",
+      "properties": {
+        "ping": { "type": "string" }
+      },
+      "required": ["ping"]
     }
   },
   "firestore": {
@@ -269,6 +298,14 @@
     "/users_list/{userId}": {
       "schema": { "$ref": "#/entities/SystemUser" },
       "description": "Internal login accounts for point-of-sale registers"
+    },
+    "/trial_devices/{deviceId}": {
+      "schema": { "$ref": "#/entities/TrialDevice" },
+      "description": "Registered devices with start dates and tampering states"
+    },
+    "/trial_pings/{deviceId}": {
+      "schema": { "$ref": "#/entities/TrialPing" },
+      "description": "Transient ping documents to resolve real-time firestore clock timestamps"
     }
   }
 }

@@ -8,6 +8,8 @@ import { uploadAllToFirebase, downloadAllFromFirebase } from './lib/firebaseSync
 import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, Cloud, ShieldAlert, Eye, EyeOff, Loader2, Mail, Lock, User as UserIcon, X, Sun, Moon, Database, Settings, CheckCircle2 } from 'lucide-react';
 import { useTranslation } from './context/LanguageContext';
+import { TrialGuard } from './utils/TrialGuard';
+import { OnboardingWizard } from './components/OnboardingWizard';
 
 // import view modules
 import Sidebar from './components/Sidebar';
@@ -32,6 +34,68 @@ export default function App() {
   const [currentView, setCurrentView] = React.useState<string>('dashboard');
   const [syncing, setSyncing] = React.useState<boolean>(false);
   const [user, setUser] = React.useState<User | null>(null);
+  
+  const [onboardingCompleted, setOnboardingCompleted] = React.useState<boolean>(() => {
+    return localStorage.getItem('ONBOARDING_SETUP_COMPLETED') === 'true';
+  });
+
+  // Trial Restriction Guard states (Ultimate Zero-Trust Security controller)
+  const [trialAllowed, setTrialAllowed] = React.useState<boolean>(true);
+  const [trialChecking, setTrialChecking] = React.useState<boolean>(true);
+  const [trialStatus, setTrialStatus] = React.useState<'active' | 'expired' | 'suspicious'>('active');
+  const [trialDaysRemaining, setTrialDaysRemaining] = React.useState<number>(14);
+  const [activationKey, setActivationKey] = React.useState<string>('');
+  const [activationError, setActivationError] = React.useState<string | null>(null);
+  const [activationSuccess, setActivationSuccess] = React.useState<boolean>(false);
+  const [activating, setActivating] = React.useState<boolean>(false);
+
+  // SECURE TRIAL GUARD INITIALIZATION (Direct React equivalent of onCreate MainActivity block)
+  React.useEffect(() => {
+    const runTrialSecurityCheck = async () => {
+      try {
+        console.log('TrialGuard: Conducting Zero-Trust structural verification...');
+        const result = await TrialGuard.checkAccess();
+        setTrialAllowed(result.allowed);
+        setTrialStatus(result.status);
+        setTrialDaysRemaining(result.daysRemaining);
+      } catch (err) {
+        console.error('Security Guard block execution failed:', err);
+      } finally {
+        setTrialChecking(false);
+      }
+    };
+
+    runTrialSecurityCheck();
+  }, []);
+
+  const handleActivateLicense = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activationKey) return;
+
+    setActivating(true);
+    setActivationError(null);
+    try {
+      const resp = await TrialGuard.activateKey(activationKey);
+      if (resp.success) {
+        setActivationSuccess(true);
+        // Refresh the check state immediately
+        const result = await TrialGuard.checkAccess();
+        setTrialAllowed(result.allowed);
+        setTrialStatus(result.status);
+        setTrialDaysRemaining(result.daysRemaining);
+      } else {
+        setActivationError(
+          resp.message === 'INVALID_KEY' 
+            ? (lang === 'ar' ? 'مفتاح التنشيط غير صالح. يرجى إدخال ترخيص حقيقي.' : 'Clé invalide. Veuillez entrer une licence valide.')
+            : (lang === 'ar' ? 'فشل الحفظ السحابي. يرجى التحقق من اتصال الإنترنت.' : 'La sauvegarde a échoué. Vérifiez votre connexion.')
+        );
+      }
+    } catch {
+      setActivationError(lang === 'ar' ? 'حدث خطأ تقني غير متوقع.' : 'Une erreur technique est survenue.');
+    } finally {
+      setActivating(false);
+    }
+  };
 
   // Load and apply persistent light/dark mode preference
   const [theme, setTheme] = React.useState<'light' | 'dark'>(() => {
@@ -885,6 +949,137 @@ export default function App() {
     }, 2000);
   };
 
+  if (!onboardingCompleted) {
+    return (
+      <OnboardingWizard
+        onOnboardingComplete={(config, companySettings) => {
+          setState(prev => ({
+            ...prev,
+            settings: {
+              ...prev.settings,
+              name: companySettings.name,
+              logo: companySettings.logo,
+              phone: companySettings.phone,
+              address: companySettings.address,
+              taxNumber: companySettings.taxNumber,
+              taxRate: companySettings.taxRate,
+              currencySymbol: companySettings.currencySymbol,
+              invoiceNotes: companySettings.invoiceNotes
+            }
+          }));
+          setOnboardingCompleted(true);
+        }}
+      />
+    );
+  }
+
+  if (trialChecking) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="flex flex-col items-center max-w-md p-6 text-center space-y-4">
+          <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+          <h2 className="text-xl font-bold font-sans">
+            {lang === 'ar' ? 'جاري التحقق من أمن وصلاحية النظام...' : 'Vérification de la sécurité du système...'}
+          </h2>
+          <p className="text-sm text-slate-400">
+            {lang === 'ar' ? 'الرجاء الانتظار ثوانٍ معدودة؛ يتم تشغيل وحدة TrialGuard للحماية وربط التوقيت السحابي.' : 'Un instant s\'il vous plaît, démarrage d\'inspection de licence.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!trialAllowed) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-500 via-amber-500 to-red-600"></div>
+          
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-505 rounded-full animate-pulse">
+              <ShieldAlert className="w-16 h-16 text-rose-500" />
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-2xl font-black tracking-tight font-sans text-rose-500">
+                {trialStatus === 'suspicious' 
+                  ? (lang === 'ar' ? 'تم قفل النظام لحماية البيانات' : 'Système verrouillé')
+                  : (lang === 'ar' ? 'انتهت الفترة التجريبية المجانية' : 'Période d\'essai gratuite expirée')}
+              </h1>
+              <p className="text-sm text-slate-400 leading-relaxed font-bold text-center">
+                {trialStatus === 'suspicious'
+                  ? (lang === 'ar' 
+                      ? 'تم رصد محاولة تلاعب بالوقت والتاريخ أو مسح تخزين النظام لتخطي صلاحية الترخيص. لقد تم إيقاف هذا الجهاز لمنع الاستغلال غير المشروع.' 
+                      : 'Une tentative de manipulation de l\'heure système ou d\'effacement de données a été détectée. L\'accès est bloqué.')
+                  : (lang === 'ar'
+                      ? 'لقد انتهت فترة الـ 14 يوماً التجريبية المجانية لنظام المبيعات والمخازن الذكي. يرجى إدخال مفتاح الترخيص الرسمي لتفعيل النظام والوصول لبياناتك.'
+                      : 'Votre période d\'essai de 14 jours a expiré. Veuillez insérer votre clé d\'activation officielle.')}
+              </p>
+            </div>
+
+            <form onSubmit={handleActivateLicense} className="w-full space-y-4">
+              <div className="space-y-1.5 text-right">
+                <label className="text-xs font-black text-slate-400 block px-1">
+                  {lang === 'ar' ? 'مفتاح الترخيص / Clé d\'activation' : 'License Key'}
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-500">
+                    <Lock className="w-5 h-5 text-indigo-400" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={activationKey}
+                    onChange={(e) => setActivationKey(e.target.value)}
+                    placeholder="ACTIVE-XXXX-XXXX-XXXX"
+                    className="w-full pl-5 pr-11 py-3 bg-slate-900 border border-slate-700/80 rounded-2xl text-center text-sm font-mono tracking-widest text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition uppercase placeholder:text-slate-600"
+                  />
+                </div>
+              </div>
+
+              {activationError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-bold rounded-xl text-center leading-normal">
+                  ⚠️ {activationError}
+                </div>
+              )}
+
+              {activationSuccess && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold rounded-xl text-center leading-normal">
+                  🎉 {lang === 'ar' ? 'تم تنشيط النظام بنجاح! جاري تحويلك...' : 'Téléchargement réussi ! Réactivation...'}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={activating || !activationKey}
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-850 disabled:text-slate-500 text-white font-black text-sm rounded-2xl shadow-lg shadow-indigo-600/10 active:scale-[0.98] transition duration-150 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {activating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{lang === 'ar' ? 'جاري التحقق...' : 'Vérification...'}</span>
+                  </>
+                ) : (
+                  <span>{lang === 'ar' ? 'تنشيط النظام الآن / Activer' : 'Activer le système'}</span>
+                )}
+              </button>
+            </form>
+
+            <div className="pt-4 border-t border-slate-800 w-full flex flex-col items-center space-y-2 text-xs">
+              <span className="text-slate-500 font-bold">
+                {lang === 'ar' ? 'معرف الجهاز الفريد (Device FP):' : 'ID Unique de l\'appareil :'} <span className="font-mono text-indigo-400">{TrialGuard.getDeviceId()}</span>
+              </span>
+              <div className="bg-indigo-950/20 border border-indigo-900/30 text-indigo-350 p-3 rounded-xl max-w-sm">
+                <span className="font-extrabold block mb-1">💡 تجربة واختبار (Licence d'évaluation):</span>
+                <code className="bg-indigo-950 text-indigo-300 font-mono text-xs px-2 py-0.5 rounded select-all">ACTIVE-SMART-POS-2026</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       dir={lang === 'ar' ? 'rtl' : 'ltr'}
@@ -970,6 +1165,16 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Trial remaining days badge */}
+            {trialDaysRemaining < 999 && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-100 dark:border-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl font-bold text-xs">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+                <span>
+                  {lang === 'ar' ? `باقي بالتجريبي: ${trialDaysRemaining} يوم` : `${trialDaysRemaining} j restants (Essai)`}
+                </span>
+              </div>
+            )}
+
             {/* Language Toggle Button */}
             <button
               onClick={() => setLang(lang === 'ar' ? 'fr' : 'ar')}
